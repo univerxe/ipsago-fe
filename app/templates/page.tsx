@@ -238,10 +238,10 @@ function InterviewTemplates() {
           </Link>
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/jobs">Jobs</Link>
+              <Link href="/guide">Guide</Link>
             </Button>
             <Button variant="ghost" size="sm">
-              Profile
+              <Link href="/onboarding">AI Interview</Link>
             </Button>
           </div>
         </div>
@@ -379,7 +379,7 @@ function InterviewTemplates() {
               </div>
               <div className="flex flex-wrap items-center justify-center gap-4">
                 <Button size="lg" className="gap-2" asChild>
-                  <Link href="/jobs">
+                  <Link href="/onboarding">
                     <Sparkles className="size-4" />
                     AI 면접 시작하기
                     <ArrowRight className="size-4" />
@@ -454,7 +454,7 @@ function InterviewTemplates() {
 
               <div className="flex gap-3 pt-4">
                 <Button className="flex-1 gap-2" asChild>
-                  <Link href="/jobs">
+                  <Link href="/onboarding">
                     <Sparkles className="size-4" />
                     이 템플릿으로 연습하기
                   </Link>

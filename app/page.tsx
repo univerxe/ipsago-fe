@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Briefcase, MessageSquare, Target, CheckCircle } from 'lucide-react'
+import { ArrowRight, Briefcase, MessageSquare, Target, CheckCircle, BookOpen, Sparkles, Clock, ShieldCheck } from 'lucide-react'
 import Link from "next/link"
 import Image from "next/image"
 
@@ -8,7 +8,7 @@ export default function LandingPage() {
     <div className="min-h-screen">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-10 py-4 flex items-center justify-between">
+        <div className="container mx-auto px-6 md:px-12 lg:px-16 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Image
               src="/logo.jpg"
@@ -26,17 +26,18 @@ export default function LandingPage() {
             <Link href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               How it Works
             </Link>
-            <Link href="#about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              About
-            </Link>
+              
             <Link href="/templates" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Templates
             </Link>
+            <Link href="/guide" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Interview Guide
+            </Link>
           </nav>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" asChild>
+            {/* <Button variant="ghost" size="sm" asChild>
               <Link href="/login">Sign In</Link>
-            </Button>
+            </Button> */}
             <Button size="sm" asChild>
               <Link href="/onboarding">Get Started</Link>
             </Button>
@@ -87,11 +88,13 @@ export default function LandingPage() {
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" className="gap-2 text-base">
-              Watch Demo
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
+            <Button size="lg" variant="outline" className="gap-2 text-base" asChild>
+              <Link href="/demo">
+                Watch Demo
+                <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </Link>
             </Button>
           </div>
 
@@ -170,6 +173,103 @@ export default function LandingPage() {
               <p className="text-muted-foreground leading-relaxed">
                 Receive comprehensive feedback on your performance with actionable insights to improve your interview skills.
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Interview Guides Section */}
+      <section className="container mx-auto px-4 py-20 border-t border-border">
+        <div className="max-w-5xl mx-auto">
+          <div className="bg-gradient-to-br from-primary/10 via-accent/5 to-background border border-primary/20 rounded-3xl p-8 md:p-12 lg:p-16 shadow-xl">
+            <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
+              <div className="space-y-6">
+                <div className="inline-flex items-center gap-2 rounded-full bg-primary/20 border border-primary/30 px-4 py-2 text-sm font-semibold text-primary">
+                  <Sparkles className="size-4" />
+                  AI-Powered Prep
+                </div>
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+                  Get Your{" "}
+                  <span className="text-primary">Personalized Interview Guide</span>
+                </h2>
+                <p className="text-lg text-muted-foreground leading-relaxed">
+                  Select any job posting and instantly receive a comprehensive interview preparation guide tailored to that specific position. Our AI analyzes the job requirements and creates a step-by-step roadmap for success.
+                </p>
+                
+                <div className="flex flex-wrap gap-4 pt-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <ShieldCheck className="size-5 text-primary" />
+                    <span>Job-Specific Strategies</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="size-5 text-primary" />
+                    <span>Preparation Timeline</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <BookOpen className="size-5 text-primary" />
+                    <span>Expected Questions</span>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <Button
+                    size="lg"
+                    className="gap-3 rounded-full px-8 py-6 text-base font-semibold shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] bg-gradient-to-r from-primary to-accent text-white"
+                    asChild
+                  >
+                    <Link href="/guide" className="flex items-center gap-3">
+                      <BookOpen className="size-5" />
+                      Explore Interview Guides
+                      <ArrowRight className="size-5" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                    <div className="bg-card/80 backdrop-blur-sm border border-border/60 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                        <Target className="size-6 text-primary" />
+                      </div>
+                      <h3 className="font-semibold mb-2">Smart Matching</h3>
+                      <p className="text-sm text-muted-foreground">
+                        AI analyzes job requirements
+                      </p>
+                    </div>
+                    <div className="bg-card/80 backdrop-blur-sm border border-border/60 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="size-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4">
+                        <Clock className="size-6 text-accent" />
+                      </div>
+                      <h3 className="font-semibold mb-2">Timeline</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Step-by-step preparation plan
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-4 pt-8">
+                    <div className="bg-card/80 backdrop-blur-sm border border-border/60 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="size-12 rounded-xl bg-chart-3/20 flex items-center justify-center mb-4">
+                        <MessageSquare className="size-6 text-chart-3" />
+                      </div>
+                      <h3 className="font-semibold mb-2">Q&A Guide</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Expected questions & answers
+                      </p>
+                    </div>
+                    <div className="bg-card/80 backdrop-blur-sm border border-border/60 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-shadow">
+                      <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                        <CheckCircle className="size-6 text-primary" />
+                      </div>
+                      <h3 className="font-semibold mb-2">Tips & Tricks</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Actionable insights included
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
