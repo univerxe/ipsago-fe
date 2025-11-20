@@ -35,7 +35,8 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
   const [interviewComplete, setInterviewComplete] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [interviewType, setInterviewType] = useState<'personality' | 'technical'>('personality')
-  const [speakerEnabled, setSpeakerEnabled] = useState(false) // TTS toggle
+  const [speakerEnabled, setSpeakerEnabled] = useState(true) // TTS toggle - enabled by default
+  const [interviewStarted, setInterviewStarted] = useState(false) // Track if interview has started
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const hasInitialized = useRef(false)
   const geminiClientRef = useRef<GeminiLiveSDK | null>(null)
@@ -119,24 +120,7 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
         // Store context for text-based API
         sessionStorage.setItem('interviewContext', JSON.stringify(context))
         setIsConnected(true)
-        
-        // Send initial greeting based on interview type
-        const getInitialMessage = () => {
-          if (interviewType === 'technical') {
-            return "안녕하세요! 기술 면접 연습 세션에 오신 것을 환영합니다. 오늘은 지원자님의 기술적 역량과 문제 해결 능력을 평가하겠습니다.\n\n지원자님의 프로필과 채용 공고를 검토했습니다. 바로 시작하겠습니다.\n\n최근에 작업하신 기술적으로 가장 복잡했던 프로젝트에 대해 말씀해 주세요. 어떤 기술 스택을 사용하셨고, 어떤 기술적 챌린지가 있었으며, 어떻게 해결하셨나요?"
-          } else {
-            return "안녕하세요! 인성 면접 연습 세션에 오신 것을 환영합니다. 오늘은 지원자님의 행동 특성, 팀워크 능력, 그리고 문화 적합성을 평가하겠습니다.\n\n지원자님의 프로필과 배경을 검토했습니다. 먼저 간단한 자기소개로 시작하겠습니다.\n\n본인에 대해, 커리어 여정, 강점, 그리고 이 포지션에 관심을 가지게 된 이유를 말씀해 주세요."
-          }
-        }
-        
-        if (!hasInitialized.current) {
-          setMessages([{
-            role: "ai",
-            content: getInitialMessage(),
-            timestamp: new Date()
-          }])
-          hasInitialized.current = true
-        }
+        hasInitialized.current = true
         
         console.log('✅ Text interview ready!')
       } catch (error) {
@@ -190,24 +174,58 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Update initial message when interview type changes
-  useEffect(() => {
-    if (messages.length === 1 && hasInitialized.current) {
-      const getInitialMessage = () => {
-        if (interviewType === 'technical') {
-          return "안녕하세요! 기술 면접 연습 세션에 오신 것을 환영합니다. 오늘은 지원자님의 기술적 역량과 문제 해결 능력을 평가하겠습니다.\n\n지원자님의 프로필과 채용 공고를 검토했습니다. 바로 시작하겠습니다.\n\n최근에 작업하신 기술적으로 가장 복잡했던 프로젝트에 대해 말씀해 주세요. 어떤 기술 스택을 사용하셨고, 어떤 기술적 챌린지가 있었으며, 어떻게 해결하셨나요?"
-        } else {
-          return "안녕하세요! 인성 면접 연습 세션에 오신 것을 환영합니다. 오늘은 지원자님의 행동 특성, 팀워크 능력, 그리고 문화 적합성을 평가하겠습니다.\n\n지원자님의 프로필과 배경을 검토했습니다. 먼저 간단한 자기소개로 시작하겠습니다.\n\n본인에 대해, 커리어 여정, 강점, 그리고 이 포지션에 관심을 가지게 된 이유를 말씀해 주세요."
-        }
-      }
-
-      setMessages([{
-        role: "ai",
-        content: getInitialMessage(),
-        timestamp: new Date()
-      }])
+  // Function to get initial message based on interview type
+  const getInitialMessage = () => {
+    if (interviewType === 'technical') {
+      return "안녕하세요! 기술 면접 연습 세션에 오신 것을 환영합니다. 오늘은 지원자님의 기술적 역량과 문제 해결 능력을 평가하겠습니다.\n\n지원자님의 프로필과 채용 공고를 검토했습니다. 바로 시작하겠습니다.\n\n최근에 작업하신 기술적으로 가장 복잡했던 프로젝트에 대해 말씀해 주세요. 어떤 기술 스택을 사용하셨고, 어떤 기술적 챌린지가 있었으며, 어떻게 해결하셨나요?"
+    } else {
+      return "안녕하세요! 인성 면접 연습 세션에 오신 것을 환영합니다. 오늘은 지원자님의 행동 특성, 팀워크 능력, 그리고 문화 적합성을 평가하겠습니다.\n\n지원자님의 프로필과 배경을 검토했습니다. 먼저 간단한 자기소개로 시작하겠습니다.\n\n본인에 대해, 커리어 여정, 강점, 그리고 이 포지션에 관심을 가지게 된 이유를 말씀해 주세요."
     }
-  }, [interviewType])
+  }
+
+  // Start interview function
+  const handleStartInterview = async () => {
+    if (!hasInitialized.current || !isConnected) {
+      console.warn('⚠️ Interview not ready yet')
+      return
+    }
+
+    console.log('🚀 Starting interview...')
+    setInterviewStarted(true)
+
+    const initialMessage = getInitialMessage()
+    
+    // Add initial message to chat
+    const aiMessage: Message = {
+      role: "ai",
+      content: initialMessage,
+      timestamp: new Date()
+    }
+    
+    setMessages([aiMessage])
+
+    // Play initial message as audio if speaker is enabled
+    if (speakerEnabled) {
+      try {
+        console.log('🔊 Playing initial greeting...')
+        setIsAISpeaking(true)
+        await playTextToSpeech(initialMessage)
+        setIsAISpeaking(false)
+        console.log('✅ Initial greeting played')
+      } catch (error) {
+        console.error('❌ Failed to play initial greeting:', error)
+        setIsAISpeaking(false)
+      }
+    }
+  }
+
+  // Update when interview type changes (only before interview starts)
+  useEffect(() => {
+    if (!interviewStarted && messages.length === 0) {
+      // Just reset the state, user will need to click Start Interview again
+      console.log('Interview type changed to:', interviewType)
+    }
+  }, [interviewType, interviewStarted, messages.length])
 
   const handleSendMessage = async (messageTextOverride?: string) => {
     const messageText = messageTextOverride || currentInput
@@ -531,6 +549,67 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
       {/* Interview Chat Area */}
       <div className="flex-1 overflow-hidden">
         <div className="container mx-auto px-4 py-6 h-full flex flex-col max-w-4xl">
+          {/* Start Interview Button */}
+          {!interviewStarted && isConnected && (
+            <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 mb-6">
+              <CardContent className="p-8 text-center space-y-6">
+                <div className="space-y-4">
+                  <div className="size-20 rounded-full bg-primary/10 mx-auto flex items-center justify-center">
+                    <Volume2 className="size-10 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold mb-3">
+                      {interviewType === 'technical' ? '기술 면접 준비 완료' : '인성 면접 준비 완료'}
+                    </h2>
+                    <p className="text-muted-foreground text-lg mb-2">
+                      {interviewType === 'technical' 
+                        ? '기술적 역량과 문제 해결 능력을 평가하는 면접입니다.'
+                        : '행동 특성, 팀워크, 문화 적합성을 평가하는 면접입니다.'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      음성 안내가 {speakerEnabled ? '켜져' : '꺼져'} 있습니다. 
+                      {speakerEnabled && ' 시작하면 AI가 질문을 읽어드립니다.'}
+                    </p>
+                  </div>
+                  
+                  {/* Speaker Toggle before starting */}
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-sm text-muted-foreground">음성 안내:</span>
+                    <Button
+                      variant={speakerEnabled ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 px-4 gap-2"
+                      onClick={() => setSpeakerEnabled(!speakerEnabled)}
+                      title={speakerEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
+                    >
+                      {speakerEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                      <span>{speakerEnabled ? "켜짐" : "꺼짐"}</span>
+                    </Button>
+                  </div>
+                </div>
+                
+                <Button 
+                  size="lg" 
+                  className="gap-2 text-lg px-8 py-6"
+                  onClick={handleStartInterview}
+                  disabled={isAISpeaking}
+                >
+                  {isAISpeaking ? (
+                    <>
+                      <Loader2 className="size-5 animate-spin" />
+                      음성 재생 중...
+                    </>
+                  ) : (
+                    <>
+                      면접 시작하기
+                      <ArrowRight className="size-5" />
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="flex-1 overflow-y-auto space-y-4 mb-4">
             {messages.map((message, index) => (
               <div
@@ -602,7 +681,7 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
 
 
           {/* Input Area */}
-          {!interviewComplete && (
+          {!interviewComplete && interviewStarted && (
             <Card className="border-2">
               <CardContent className="p-4">
                 <div className="flex gap-3">
