@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
+type DeltaContentChunk = string | { text?: string }
+
 export async function POST(request: NextRequest) {
   try {
     console.log('📨 Received OpenAI interview chat request')
@@ -144,23 +146,64 @@ ${userProfile.resumeText ? userProfile.resumeText.substring(0, 2000) : '이력�
       { role: 'user', content: userMessage }
     ]
 
-    console.log('🚀 Sending to OpenAI...')
+    console.log('🚀 Sending to OpenAI (streaming)...')
 
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // Fast and cost-effective
-      messages,
-      temperature: 0.7,
-      max_tokens: 300,
+    const encoder = new TextEncoder()
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini', // Fast and cost-effective
+            messages,
+            temperature: 0.7,
+            max_tokens: 300,
+            stream: true,
+          })
+
+          for await (const part of completion) {
+            const deltaContent = part.choices?.[0]?.delta?.content
+            let contentChunk = ''
+
+            if (typeof deltaContent === 'string') {
+              contentChunk = deltaContent
+            } else if (Array.isArray(deltaContent)) {
+              contentChunk = (deltaContent as DeltaContentChunk[])
+                .map((chunk) => (typeof chunk === 'string' ? chunk : chunk?.text ?? ''))
+                .join('')
+            }
+
+            if (contentChunk) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ token: contentChunk })}\n\n`)
+              )
+            }
+          }
+
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ done: true, timestamp: new Date().toISOString() })}\n\n`
+            )
+          )
+          controller.close()
+        } catch (streamError: any) {
+          console.error('❌ Streaming error:', streamError)
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ error: streamError?.message || 'Streaming error' })}\n\n`
+            )
+          )
+          controller.close()
+        }
+      },
     })
 
-    const aiResponse = completion.choices[0].message.content
-
-    console.log('✅ Response received:', aiResponse?.substring(0, 100) + '...')
-
-    return NextResponse.json({
-      message: aiResponse,
-      timestamp: new Date().toISOString(),
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
     })
   } catch (error: any) {
     console.error('❌ OpenAI chat error:', error)

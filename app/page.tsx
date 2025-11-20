@@ -8,7 +8,7 @@ export default function LandingPage() {
     <div className="min-h-screen">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="container mx-auto px-10 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Image
               src="/logo.jpg"
@@ -28,6 +28,9 @@ export default function LandingPage() {
             </Link>
             <Link href="#about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               About
+            </Link>
+            <Link href="/templates" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Templates
             </Link>
           </nav>
           <div className="flex items-center gap-3">
@@ -120,6 +123,22 @@ export default function LandingPage() {
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Our AI-powered platform guides you through every step of the Korean job application process
             </p>
+            <div className="flex justify-center">
+              <Button
+                size="lg"
+                className="gap-3 rounded-full px-6 py-6 text-base font-semibold shadow-[0_15px_40px_rgba(16,185,129,0.25)] bg-gradient-to-r from-emerald-400 to-primary text-white hover:brightness-110 transition-all hover:scale-[1.02]"
+                asChild
+              >
+                <Link href="/templates" className="flex items-center gap-3">
+                  <span className="relative flex size-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/80 opacity-70"></span>
+                    <span className="relative inline-flex rounded-full size-3 bg-white"></span>
+                  </span>
+                  View Templates
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">

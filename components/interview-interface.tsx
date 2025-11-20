@@ -30,6 +30,7 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
   const [isRecording, setIsRecording] = useState(false)
   const [isAISpeaking, setIsAISpeaking] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isStreamingResponse, setIsStreamingResponse] = useState(false)
   const [interviewPhase, setInterviewPhase] = useState<InterviewPhase>("intro")
   const [questionCount, setQuestionCount] = useState(0)
   const [interviewComplete, setInterviewComplete] = useState(false)
@@ -242,6 +243,8 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
     setCurrentInput("")
     setIsLoading(true)
 
+    let aiMessageIndex = -1
+
     try {
       // Use text-based API
       if (isConnected) {
@@ -320,29 +323,109 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
           })
         })
 
-        if (!response.ok) {
+        if (!response.ok || !response.body) {
           const errorText = await response.text()
           console.error('❌ API Error:', response.status, errorText)
           throw new Error(`API request failed: ${response.status} - ${errorText}`)
         }
 
-        const data = await response.json()
-        console.log('✅ API response received:', data.message?.substring(0, 50) + '...')
-        
-        const aiMessage: Message = {
-          role: "ai",
-          content: data.message,
-          timestamp: new Date()
+        setIsStreamingResponse(true)
+
+        const aiTimestamp = new Date()
+        setMessages((prev) => {
+          aiMessageIndex = prev.length
+          return [...prev, { role: "ai", content: "", timestamp: aiTimestamp }]
+        })
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        let fullMessage = ""
+        let streamComplete = false
+
+        const commitMessageUpdate = (content: string) => {
+          setMessages((prev) =>
+            prev.map((msg, idx) =>
+              idx === aiMessageIndex ? { ...msg, content } : msg
+            )
+          )
         }
-        
-        setMessages((prev) => [...prev, aiMessage])
+
+        const commitTimestampUpdate = (timestamp: Date) => {
+          setMessages((prev) =>
+            prev.map((msg, idx) =>
+              idx === aiMessageIndex ? { ...msg, timestamp } : msg
+            )
+          )
+        }
+
+        while (!streamComplete) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split('\n\n')
+          buffer = events.pop() || ""
+
+          for (const eventRaw of events) {
+            const event = eventRaw.trim()
+            if (!event.startsWith('data:')) continue
+            const dataString = event.slice(5).trim()
+            if (!dataString) continue
+
+            const payload = JSON.parse(dataString)
+            if (payload.error) {
+              throw new Error(payload.error)
+            }
+
+            if (payload.token) {
+              fullMessage += payload.token as string
+              commitMessageUpdate(fullMessage)
+            }
+
+            if (payload.done) {
+              streamComplete = true
+              if (payload.timestamp) {
+                commitTimestampUpdate(new Date(payload.timestamp))
+              }
+            }
+          }
+        }
+
+        if (buffer.trim() && !streamComplete) {
+          const events = buffer.split('\n\n')
+          for (const eventRaw of events) {
+            const event = eventRaw.trim()
+            if (!event.startsWith('data:')) continue
+            const dataString = event.slice(5).trim()
+            if (!dataString) continue
+            const payload = JSON.parse(dataString)
+            if (payload.error) throw new Error(payload.error)
+            if (payload.token) {
+              fullMessage += payload.token as string
+              commitMessageUpdate(fullMessage)
+            }
+            if (payload.done) {
+              streamComplete = true
+              if (payload.timestamp) {
+                commitTimestampUpdate(new Date(payload.timestamp))
+              }
+            }
+          }
+        }
+
+        if (!fullMessage.trim()) {
+          fullMessage = "Thank you for sharing. Could you tell me more about your experience with that?"
+          commitMessageUpdate(fullMessage)
+        }
+
+        setIsStreamingResponse(false)
         setIsLoading(false)
         
         // Play TTS if speaker is enabled
-        if (speakerEnabled && data.message) {
+        if (speakerEnabled && fullMessage) {
           try {
             setIsAISpeaking(true)
-            await playTextToSpeech(data.message)
+            await playTextToSpeech(fullMessage)
             setIsAISpeaking(false)
           } catch (error) {
             console.error('❌ TTS playback failed:', error)
@@ -372,19 +455,32 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
         }
         setMessages((prev) => [...prev, fallbackMessage])
         setIsLoading(false)
+        setIsStreamingResponse(false)
         setQuestionCount(prev => prev + 1)
       }
     } catch (error) {
       console.error('❌ Error sending message:', error)
       // Ultimate fallback
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      const fallbackMessage: Message = {
-        role: "ai",
-        content: "Thank you for sharing. Could you tell me more about your experience with that?",
-        timestamp: new Date()
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const fallbackText = "Thank you for sharing. Could you tell me more about your experience with that?"
+
+      if (aiMessageIndex !== -1) {
+        setMessages((prev) =>
+          prev.map((msg, idx) =>
+            idx === aiMessageIndex ? { ...msg, content: fallbackText, timestamp: new Date() } : msg
+          )
+        )
+      } else {
+        const fallbackMessage: Message = {
+          role: "ai",
+          content: fallbackText,
+          timestamp: new Date()
+        }
+        setMessages((prev) => [...prev, fallbackMessage])
       }
-      setMessages((prev) => [...prev, fallbackMessage])
+
       setIsLoading(false)
+      setIsStreamingResponse(false)
       setQuestionCount(prev => prev + 1)
     }
   }
@@ -496,7 +592,7 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <Link href="/dashboard" className="flex items-center gap-2">
               <Image
                 src="/logo.jpg"
@@ -507,11 +603,14 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
               />
               <span className="font-bold text-xl">IpsaGo</span>
             </Link>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/templates">Templates</Link>
+              </Button>
               <Badge variant="secondary" className="hidden sm:flex">
                 {getPhaseLabel()}
               </Badge>
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground whitespace-nowrap">
                 Question {questionCount} / {totalQuestions}
               </div>
             </div>
@@ -551,103 +650,137 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
         <div className="container mx-auto px-4 py-6 h-full flex flex-col max-w-4xl">
           {/* Start Interview Button */}
           {!interviewStarted && isConnected && (
-            <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 mb-6">
-              <CardContent className="p-8 text-center space-y-6">
-                <div className="space-y-4">
-                  <div className="size-20 rounded-full bg-primary/10 mx-auto flex items-center justify-center">
-                    <Volume2 className="size-10 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold mb-3">
-                      {interviewType === 'technical' ? '기술 면접 준비 완료' : '인성 면접 준비 완료'}
-                    </h2>
-                    <p className="text-muted-foreground text-lg mb-2">
-                      {interviewType === 'technical' 
-                        ? '기술적 역량과 문제 해결 능력을 평가하는 면접입니다.'
-                        : '행동 특성, 팀워크, 문화 적합성을 평가하는 면접입니다.'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      음성 안내가 {speakerEnabled ? '켜져' : '꺼져'} 있습니다. 
-                      {speakerEnabled && ' 시작하면 AI가 질문을 읽어드립니다.'}
-                    </p>
-                  </div>
-                  
-                  {/* Speaker Toggle before starting */}
-                  <div className="flex items-center justify-center gap-3">
-                    <span className="text-sm text-muted-foreground">음성 안내:</span>
-                    <Button
-                      variant={speakerEnabled ? "default" : "outline"}
-                      size="sm"
-                      className="h-8 px-4 gap-2"
-                      onClick={() => setSpeakerEnabled(!speakerEnabled)}
-                      title={speakerEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
-                    >
-                      {speakerEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-                      <span>{speakerEnabled ? "켜짐" : "꺼짐"}</span>
-                    </Button>
+            <Card className="border-none bg-transparent shadow-none mb-6">
+              <CardContent className="p-0">
+                <div className="rounded-[32px] border border-primary/15 bg-gradient-to-b from-primary/5 via-background to-background shadow-xl px-6 py-8 sm:px-10 sm:py-12">
+                  <div className="max-w-2xl mx-auto space-y-8 text-center">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/80 dark:bg-white/10 border border-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary shadow-sm">
+                      Interview Ready
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h2 className="text-4xl font-extrabold tracking-tight text-foreground">
+                        {interviewType === 'technical' ? '기술 면접 준비 완료' : '인성 면접 준비 완료'}
+                      </h2>
+                      <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed">
+                        {interviewType === 'technical' 
+                          ? '기술적 역량과 문제 해결 능력을 평가하는 면접입니다.'
+                          : '행동 특성, 팀워크, 문화 적합성을 평가하는 면접입니다.'}
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-4 text-left">
+                      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-border px-6 py-5 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                            <Volume2 className="size-6" />
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase text-muted-foreground font-semibold tracking-wide">
+                              현재 선택된 모드
+                            </p>
+                            <p className="text-lg font-semibold text-foreground">
+                              {interviewType === 'technical' ? 'Technical Interview' : 'Personality Test'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="sm:ml-auto">
+                          <Button
+                            variant={speakerEnabled ? "default" : "outline"}
+                            size="lg"
+                            className="h-11 px-6 gap-2 font-semibold w-full sm:w-auto"
+                            onClick={() => setSpeakerEnabled(!speakerEnabled)}
+                            title={speakerEnabled ? "음성 안내 끄기" : "음성 안내 켜기"}
+                          >
+                            {speakerEnabled ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+                            <span className="text-base">{speakerEnabled ? "음성 안내 켜짐" : "음성 안내 꺼짐"}</span>
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-primary/10 px-6 py-6 shadow-sm space-y-3">
+                        <p className="text-sm font-semibold text-muted-foreground">
+                          안내
+                        </p>
+                        <p className="text-lg font-semibold text-foreground leading-relaxed">
+                          음성 안내가 <span className="text-primary">{speakerEnabled ? '켜져' : '꺼져'}</span> 있습니다. 
+                          {speakerEnabled ? ' 시작하면 AI가 질문을 읽어드립니다.' : ' 필요시 언제든 음성 안내를 켤 수 있습니다.'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-2">
+                      <Button 
+                        size="default" 
+                        className="gap-3 text-lg sm:text-lg font-semibold px-1 py-4 h-auto rounded-xl shadow-lg hover:shadow-2xl transition-shadow w-full sm:w-auto"
+                        onClick={handleStartInterview}
+                        disabled={isAISpeaking}
+                      >
+                        {isAISpeaking ? (
+                          <>
+                            <Loader2 className="size-6 animate-spin" />
+                            <span>음성 재생 중...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>면접 시작하기</span>
+                            <ArrowRight className="size-6" />
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                
-                <Button 
-                  size="lg" 
-                  className="gap-2 text-lg px-8 py-6"
-                  onClick={handleStartInterview}
-                  disabled={isAISpeaking}
-                >
-                  {isAISpeaking ? (
-                    <>
-                      <Loader2 className="size-5 animate-spin" />
-                      음성 재생 중...
-                    </>
-                  ) : (
-                    <>
-                      면접 시작하기
-                      <ArrowRight className="size-5" />
-                    </>
-                  )}
-                </Button>
               </CardContent>
             </Card>
           )}
 
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                {message.role === "ai" && (
-                  <Avatar className="size-10 border-2 border-primary">
-                    <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
-                  </Avatar>
-                )}
+          <div className="flex-1 overflow-y-auto space-y-5 mb-4">
+            {messages.map((message, index) => {
+              const isUser = message.role === "user"
+              const bubbleClasses = isUser
+                ? "bg-emerald-500 text-white border-emerald-400/70 shadow-emerald-500/20"
+                : "bg-card/80 text-foreground border-border/60 shadow-black/5"
+
+              return (
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card border border-border"
-                  }`}
+                  key={index}
+                  className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                  <span className="text-xs opacity-70 mt-2 block">
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  {!isUser && (
+                    <Avatar className="size-10 border-2 border-primary/70 bg-primary/10">
+                      <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <div
+                    className={`max-w-[78%] sm:max-w-[70%] rounded-3xl px-5 py-4 border shadow-lg transition-all ${bubbleClasses}`}
+                  >
+                    <div className={`flex items-center justify-between text-[11px] uppercase tracking-[0.2em] font-semibold ${isUser ? "text-white/80" : "text-muted-foreground/80"}`}>
+                      <span>{isUser ? "YOU" : "AI"}</span>
+                      <span className="text-[10px] tracking-normal">
+                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className={`mt-3 text-base leading-relaxed whitespace-pre-wrap ${isUser ? "text-white" : "text-foreground"}`}>
+                      {message.content || (isStreamingResponse && !isUser && index === messages.length - 1 ? '...' : '')}
+                    </p>
+                  </div>
+                  {isUser && (
+                    <Avatar className="size-10 border-2 border-emerald-400/70 bg-emerald-500/20">
+                      <AvatarFallback className="bg-accent text-accent-foreground">You</AvatarFallback>
+                    </Avatar>
+                  )}
                 </div>
-                {message.role === "user" && (
-                  <Avatar className="size-10 border-2 border-accent">
-                    <AvatarFallback className="bg-accent text-accent-foreground">You</AvatarFallback>
-                  </Avatar>
-                )}
-              </div>
-            ))}
+              )
+            })}
             
-            {isLoading && (
+            {isLoading && !isStreamingResponse && (
               <div className="flex gap-3 justify-start">
-                <Avatar className="size-10 border-2 border-primary">
+                <Avatar className="size-10 border-2 border-primary/70 bg-primary/10">
                   <AvatarFallback className="bg-primary text-primary-foreground">AI</AvatarFallback>
                 </Avatar>
-                <div className="bg-card border border-border rounded-2xl px-4 py-3">
-                  <Loader2 className="size-4 animate-spin" />
+                <div className="bg-card/80 border border-border rounded-3xl px-5 py-4">
+                  <Loader2 className="size-5 animate-spin" />
                 </div>
               </div>
             )}
@@ -682,78 +815,77 @@ export function InterviewInterface({ jobId }: { jobId: string }) {
 
           {/* Input Area */}
           {!interviewComplete && interviewStarted && (
-            <Card className="border-2">
-              <CardContent className="p-4">
-                <div className="flex gap-3">
+            <Card className="border-none bg-transparent">
+              <CardContent className="p-0">
+                <div className="rounded-3xl border border-border/50 bg-card/60 backdrop-blur px-4 py-5 sm:px-6 sm:py-6 space-y-4">
                   <Textarea
                     placeholder={
                       interviewType === 'technical' 
-                        ? "기술적 세부사항과 구체적인 구현 방법을 설명해주세요... (Enter: 전송)"
-                        : "경험과 상황을 구체적으로 말씀해주세요... (Enter: 전송)"
+                        ? "기술적 세부사항과 구체적인 구현 방법을 설명해주세요..."
+                        : "경험과 상황을 구체적으로 말씀해주세요..."
                     }
                     value={currentInput}
                     onChange={(e) => setCurrentInput(e.target.value)}
                     onKeyDown={handleKeyPress}
-                    className="min-h-[60px] max-h-[200px] resize-none"
+                    className="min-h-[120px] max-h-[240px] resize-none bg-transparent border-none text-base sm:text-lg leading-relaxed placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
                     disabled={isLoading || isRecording}
                   />
                   
-                  <div className="flex flex-col gap-2">
-                    {/* Mic Button */}
-                    <Button
-                      size="icon"
-                      variant={isRecording ? "destructive" : "outline"}
-                      className="flex-shrink-0"
-                      onClick={toggleRecording}
-                      disabled={isLoading}
-                      title={isRecording ? "Stop recording" : "Start voice input"}
-                    >
-                      {isRecording ? <MicOff className="size-4" /> : <Mic className="size-4" />}
-                    </Button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`rounded-full h-10 px-5 text-sm font-semibold gap-2 transition-colors ${speakerEnabled ? "bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-500/90" : "text-muted-foreground"}`}
+                        onClick={() => setSpeakerEnabled(!speakerEnabled)}
+                        title={speakerEnabled ? "Disable AI voice" : "Enable AI voice"}
+                      >
+                        {speakerEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                        <span>{speakerEnabled ? "Voice ON" : "Voice OFF"}</span>
+                      </Button>
+                      
+                      {isRecording && (
+                        <span className="flex items-center gap-2 text-red-500 text-sm font-semibold">
+                          <span className="size-2 rounded-full bg-red-500 animate-pulse"></span>
+                          Recording...
+                        </span>
+                      )}
+                      
+                      {isLoading && !isRecording && (
+                        <span className="flex items-center gap-2 text-primary text-sm font-medium">
+                          <Loader2 className="size-4 animate-spin" />
+                          {isStreamingResponse ? 'AI가 실시간으로 답변 중입니다...' : 'AI가 답변을 준비 중입니다...'}
+                        </span>
+                      )}
+                    </div>
                     
-                    {/* Send Button */}
-                    <Button
-                      size="icon"
-                      className="flex-shrink-0"
-                      onClick={() => handleSendMessage()}
-                      disabled={!currentInput.trim() || isLoading || isRecording}
-                    >
-                      <Send className="size-4" />
-                    </Button>
+                    <div className="flex items-center gap-2 justify-end w-full sm:w-auto">
+                      <Button
+                        size="icon"
+                        variant={isRecording ? "destructive" : "outline"}
+                        className="size-12 rounded-full"
+                        onClick={toggleRecording}
+                        disabled={isLoading}
+                        title={isRecording ? "Stop recording" : "Start voice input"}
+                      >
+                        {isRecording ? <MicOff className="size-5" /> : <Mic className="size-5" />}
+                      </Button>
+                      
+                      <Button
+                        size="icon"
+                        className="size-12 rounded-full bg-emerald-500 text-white hover:bg-emerald-500/90"
+                        onClick={() => handleSendMessage()}
+                        disabled={!currentInput.trim() || isLoading || isRecording}
+                        title="Send message"
+                      >
+                        <Send className="size-5" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-4">
-                    {/* Speaker Toggle */}
-                    <Button
-                      variant={speakerEnabled ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 px-3 gap-2"
-                      onClick={() => setSpeakerEnabled(!speakerEnabled)}
-                      title={speakerEnabled ? "Disable AI voice" : "Enable AI voice"}
-                    >
-                      {speakerEnabled ? <Volume2 className="size-3" /> : <VolumeX className="size-3" />}
-                      <span className="text-xs">
-                        {speakerEnabled ? "Voice ON" : "Voice OFF"}
-                      </span>
-                    </Button>
-                    
-                    {isRecording && (
-                      <span className="flex items-center gap-2 text-red-500 animate-pulse">
-                        <span className="size-2 rounded-full bg-red-500"></span>
-                        Recording...
-                      </span>
-                    )}
-                    
-                    {isLoading && !isRecording && (
-                      <span className="flex items-center gap-2 text-primary">
-                        <Loader2 className="size-4 animate-spin" />
-                        {isAISpeaking ? 'AI가 답변 중입니다...' : 'AI가 답변을 생성 중입니다...'}
-                      </span>
-                    )}
+                  
+                  <div className="text-xs text-muted-foreground text-right">
+                    Enter를 눌러 전송
                   </div>
-                  <span>Enter를 눌러 전송</span>
                 </div>
               </CardContent>
             </Card>
