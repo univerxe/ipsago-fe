@@ -10,7 +10,7 @@
   [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0-38B2AC)](https://tailwindcss.com/)
   [![AI Powered](https://img.shields.io/badge/AI-Gemini_+_OpenAI-purple)](https://ai.google.dev/)
   
-  🌐 **[Live Demo](https://your-website-link.com)** | 📚 [Documentation](#quick-start) | 
+  🌐 **[Live Demo](https://ipsago-fe.vercel.app/)** | 📚 [Documentation](#quick-start) | 
 </div>
 
 ## 📸 Platform Overview
